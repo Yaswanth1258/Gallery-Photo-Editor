@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gallery Photo Editor</title>
+<style>
+  :root {
+    --accent: #7c9cff;
+    --text: #eaf0ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;  /* stack editor & gallery */
+    align-items: center;     /* center horizontally */
+    min-height: 100vh;
+  }
+  .editor-container {
+    width: 90%;
+    max-width: 750px;
+    background: rgba(18, 25, 51, 0.65);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 20px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    margin-top: 20px;
+  }
+  h2 { margin-bottom: 12px; }
+  .btn {
+    display: inline-block;
+    padding: 14px;
+    margin: 6px;
+    font-size: 1rem;
+    border-radius: 12px;
+    background: rgba(18, 32, 84, 0.85);
+    border: 1px solid rgba(124,156,255,.4);
+    color: var(--text);
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  .btn:hover { filter: brightness(1.2); }
+  canvas {
+    margin-top: 16px;
+    max-width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(124,156,255,.25);
+    background: #000;
+  }
+  .bottom-buttons {
+    margin: 16px 0;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+  }
+  .bottom-buttons .btn {
+    flex: 1; /* each takes half width */
+    max-width: 50%;
+    font-size: 1.1rem;
+  }
+  .tools {
+    width: 100%;
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 2 equal columns */
+    gap: 12px;
+  }
+  .tool {
+    padding: 12px;
+    background: rgba(255,255,255,.08);
+    border-radius: 10px;
+  }
+  .tool label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .tool input[type="range"] {
+    width: 100%;
+  }
+  #editorContent { display: none; }
+  .gallery-container {
+    display: none;
+    width: 90%;
+    max-width: 750px;
+    margin: 20px auto;
+    padding: 15px;
+    background: rgba(18,25,51,0.75);
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .gallery-container h2 {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 15px;
+  }
+  .gallery-item {
+    position: relative;
+    margin: 8px;
+  }
+  .gallery-item img {
+    max-width: 150px;
+    border-radius: 8px;
+    border: 2px solid rgba(255,255,255,.2);
+  }
+  .remove-gallery {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: rgba(255,0,0,.7);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    padding: 3px 7px;
+  }
+</style>
+</head>
+<body>
+
+<div class="editor-container">
+  <h2>🖼️ Gallery Photo Editor</h2>
+  
+  <!-- Upload -->
+  <input id="upload" type="file" accept="image/*" class="btn" />
+
+  <!-- Content (only visible after upload) -->
+  <div id="editorContent">
+    <!-- Canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Buttons (half-width each) -->
+    <div class="bottom-buttons">
+      <button id="remove" class="btn">Remove</button>
+      <button id="download" class="btn">Download</button>
+      <button id="saveGallery" class="btn">Save to Gallery</button>
+    </div>
+
+    <!-- Tools (2 column layout) -->
+    <div class="tools">
+      <div class="tool">
+        <label>Brightness</label>
+        <input id="brightness" type="range" min="50" max="150" value="100">
+      </div>
+      <div class="tool">
+        <label>Contrast</label>
+        <input id="contrast" type="range" min="50" max="150" value="100">
+      </div>
+      <div class="tool">
+        <label>Saturation</label>
+        <input id="saturation" type="range" min="0" max="200" value="100">
+      </div>
+      <div class="tool">
+        <label>Rotate</label>
+        <input id="rotate" type="range" min="0" max="360" value="0">
+      </div>
+      <div class="tool">
+        <label>Crop (Zoom)</label>
+        <input id="crop" type="range" min="50" max="150" value="100">
+      </div>
+      <div class="tool">
+        <label>Opacity</label>
+        <input id="opacity" type="range" min="10" max="100" value="100">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gallery -->
+<div id="gallery" class="gallery-container">
+  <h2>📸 Gallery Photos</h2>
+</div>
+
+<script>
+const upload = document.getElementById('upload');
+const removeBtn = document.getElementById('remove');
+const downloadBtn = document.getElementById('download');
+const saveGalleryBtn = document.getElementById('saveGallery');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const editorContent = document.getElementById('editorContent');
+const gallery = document.getElementById('gallery');
+
+const controls = {
+  brightness: document.getElementById('brightness'),
+  contrast: document.getElementById('contrast'),
+  saturation: document.getElementById('saturation'),
+  rotate: document.getElementById('rotate'),
+  crop: document.getElementById('crop'),
+  opacity: document.getElementById('opacity')
+};
+
+let img = new Image();
+let original = null;
+
+// Load image
+upload.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    img = new Image();
+    img.onload = () => {
+      canvas.width = img.width > 600 ? 600 : img.width;
+      canvas.height = img.height * (canvas.width / img.width);
+      original = img;
+      editorContent.style.display = "block";
+      applyFilters();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// Apply filters
+function applyFilters() {
+  if (!original) return;
+  
+  let scale = controls.crop.value / 100;
+  let w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  
+  ctx.save();
+  ctx.globalAlpha = controls.opacity.value / 100;
+  ctx.translate(w/2, h/2);
+  ctx.rotate(controls.rotate.value * Math.PI / 180);
+  ctx.filter = `
+    brightness(${controls.brightness.value}%)
+    contrast(${controls.contrast.value}%)
+    saturate(${controls.saturation.value}%)
+  `;
+  
+  const imgW = original.width * scale * (w/original.width);
+  const imgH = original.height * scale * (h/original.height);
+  ctx.drawImage(original, -imgW/2, -imgH/2, imgW, imgH);
+  ctx.restore();
+}
+
+Object.values(controls).forEach(c => c.addEventListener('input', applyFilters));
+
+// Remove
+removeBtn.addEventListener('click', () => {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  original = null;
+  upload.value = "";
+  editorContent.style.display = "none";
+});
+
+// Download
+downloadBtn.addEventListener('click', () => {
+  if (!original) return alert("No image to download!");
+  const link = document.createElement('a');
+  link.download = "edited-image.png";
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// Save to Gallery
+saveGalleryBtn.addEventListener('click', () => {
+  if (!original) return alert("No image to save!");
+  const imgEl = document.createElement('img');
+  imgEl.src = canvas.toDataURL('image/png');
+  
+  const wrapper = document.createElement('div');
+  wrapper.className = "gallery-item";
+  wrapper.appendChild(imgEl);
+  
+  const removeButton = document.createElement('button');
+  removeButton.textContent = "×";
+  removeButton.className = "remove-gallery";
+  removeButton.onclick = () => {
+    wrapper.remove();
+    if (gallery.querySelectorAll(".gallery-item").length === 0) {
+      gallery.style.display = "none"; // hide if no photos left
+    }
+  };
+  
+  wrapper.appendChild(removeButton);
+  gallery.appendChild(wrapper);
+  gallery.style.display = "flex";
+});
+</script>
+</body>
+</html>
